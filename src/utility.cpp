@@ -4,6 +4,9 @@
 #include <openssl/pem.h>
 #include <openssl/hmac.h>
 #include <openssl/rsa.h>
+#include <openssl/ec.h>
+#include <openssl/ecdsa.h>
+#include <libjose/jwa_ec.hpp>
 #include "utility.hpp"
 
 namespace JOSE {
@@ -14,8 +17,16 @@ static inline const EVP_MD *HashFunc2EVP(HashFunc::Type hash) {
         case HashFunc::SHA256: return EVP_sha256();
         case HashFunc::SHA384: return EVP_sha384();
         case HashFunc::SHA512: return EVP_sha512();
+        case HashFunc::NONE: return nullptr;
     }
-    return nullptr;
+}
+
+static inline int CurveType2NID(JWA_EC::Curve::Type type) {
+    switch (type) {
+        case JWA_EC::Curve::P256: return NID_X9_62_prime256v1;
+        case JWA_EC::Curve::P384: return NID_secp384r1;
+        case JWA_EC::Curve::P521: return NID_secp521r1;
+    }
 }
 
 template <HashFunc::Type> struct HashFuncTrait;
@@ -42,35 +53,75 @@ struct Sensitive: public String {
     };
 };
 
+static inline ustring bn2bin(const BIGNUM *x) {
+    ustring buffer(BN_num_bytes(x), 0);
+    const size_t len = BN_bn2bin(x, const_cast<unsigned char *>(buffer.data()));
+    buffer.resize(len);
+    return buffer;
+}
+
+static inline void bin2bn(BIGNUM *&x, const ustring &bin) {
+    x = BN_bin2bn(bin.data(), bin.size(), x);
+}
+
 struct rsa {
     RSA *_;
     rsa(): _(RSA_new()) {}
     ~rsa() {RSA_free(_);}
     void set_n(const ustring &b) {
-        _->n = BN_bin2bn(b.data(), b.size(), _->n);
+        bin2bn(_->n, b);
     }
     void set_e(const ustring &b) {
-        _->e = BN_bin2bn(b.data(), b.size(), _->e);
+        bin2bn(_->e, b);
     }
     void set_d(const ustring &b) {
-        _->d = BN_bin2bn(b.data(), b.size(), _->d);
+        bin2bn(_->d, b);
     }
     void set_p(const ustring &b) {
-        _->p = BN_bin2bn(b.data(), b.size(), _->p);
+        bin2bn(_->p, b);
     }
     void set_q(const ustring &b) {
-        _->q = BN_bin2bn(b.data(), b.size(), _->q);
+        bin2bn(_->q, b);
     }
     void set_dp(const ustring &b) {
-        _->dmp1 = BN_bin2bn(b.data(), b.size(), _->dmp1);
+        bin2bn(_->dmp1, b);
     }
     void set_dq(const ustring &b) {
-        _->dmq1 = BN_bin2bn(b.data(), b.size(), _->dmq1);
+        bin2bn(_->dmq1, b);
     }
     void set_qi(const ustring &b) {
-        _->iqmp = BN_bin2bn(b.data(), b.size(), _->iqmp);
+        bin2bn(_->iqmp, b);
     }
     operator RSA*() {return _;}
+};
+
+struct ec {
+    EC_KEY *_;
+    ec(): _(EC_KEY_new()) {
+        EC_KEY_set_asn1_flag(_, OPENSSL_EC_NAMED_CURVE);
+    }
+    ~ec() {EC_KEY_free(_);}
+    void set_crv(JWA_EC::Curve::Type crv) {
+        EC_GROUP *group = EC_GROUP_new_by_curve_name(CurveType2NID(crv));
+        EC_KEY_set_group(_, group);
+        EC_GROUP_free(group);
+    }
+    void set_xy(const ustring &x, const ustring &y) {
+        BIGNUM *bx = nullptr;
+        bin2bn(bx, x);
+        BIGNUM *by = nullptr;
+        bin2bn(by, y);
+        EC_KEY_set_public_key_affine_coordinates(_, bx, by);
+        BN_free(by);
+        BN_free(bx);
+    }
+    void set_d(const ustring &d) {
+        BIGNUM *bd = nullptr;
+        bin2bn(bd, d);
+        EC_KEY_set_private_key(_, bd);
+        BN_free(bd);
+    }
+    operator EC_KEY*() {return _;}
 };
 
 struct evp_pkey {
@@ -80,6 +131,9 @@ struct evp_pkey {
     ~evp_pkey() {EVP_PKEY_free(_);}
     bool set(rsa &rsa) {
         return 1 == EVP_PKEY_set1_RSA(_, rsa);
+    }
+    bool set(ec &ec) {
+        return 1 == EVP_PKEY_set1_EC_KEY(_, ec);
     }
     operator EVP_PKEY*() {return _;}
 };
@@ -117,6 +171,42 @@ struct evp_md_ctx {
         return 1 == EVP_DigestVerifyFinal(_, sign.c_str(), sign.size());
     }
 };
+
+struct ecdsa_sig {
+    ECDSA_SIG *_;
+    ecdsa_sig(): _(ECDSA_SIG_new()) {}
+    ~ecdsa_sig() {ECDSA_SIG_free(_);}
+    BIGNUM *&r() {return _->r;}
+    BIGNUM *&s() {return _->s;}
+    operator ECDSA_SIG*() {return _;}
+    operator ECDSA_SIG**() {return &_;}
+};
+
+static inline ustring signature_asn2jose(const ustring &asn) {
+    ustring jose;
+    ecdsa_sig sig;
+    const unsigned char *p = asn.data();
+    if (d2i_ECDSA_SIG(sig, &p, asn.size()) == nullptr) {
+        return jose;
+    }
+
+    jose.append(bn2bin(sig.r()));
+    jose.append(bn2bin(sig.s()));
+    return jose;
+}
+
+static inline ustring signature_jose2asn(const ustring &jose) {
+    ustring asan;
+    ecdsa_sig sig;
+    bin2bn(sig.r(), jose.substr(0, jose.size() / 2));
+    bin2bn(sig.s(), jose.substr(jose.size() / 2));
+    unsigned char *p = nullptr;
+    int len;
+    len = i2d_ECDSA_SIG(sig, &p);
+    asan.append(p, len);
+    if (p) OPENSSL_free(p);
+    return asan;
+}
 
 static inline void urlsafe_encode(std::string &input) {
     for (char &c: input) {
@@ -218,6 +308,37 @@ std::string RSAPrivateKey2PEM(const ustring &n, const ustring &e, const ustring 
     return std::string{ptr, len};
 }
 
+std::string ECPublicKey2PEM(JWA_EC::Curve::Type crv, const ustring &x, const ustring &y) {
+    ec key;
+    key.set_crv(crv);
+    key.set_xy(x, y);
+    evp_pkey pkey;
+    if (!pkey.set(key)) {
+        return std::string{};
+    }
+    bio mem(BIO_new(BIO_s_mem()));
+    if (1 != PEM_write_bio_PUBKEY(mem, pkey)) {
+        return std::string{};
+    }
+    char *ptr;
+    size_t len = BIO_get_mem_data(mem, &ptr);
+    return std::string{ptr, len};
+}
+
+std::string ECPrivateKey2PEM(JWA_EC::Curve::Type crv, const ustring &x, const ustring &y, const ustring &d) {
+    ec key;
+    key.set_crv(crv);
+    key.set_xy(x, y);
+    key.set_d(d);
+    bio mem(BIO_new(BIO_s_mem()));
+    if (1 != PEM_write_bio_ECPrivateKey(mem, key, nullptr, nullptr, 0, nullptr, nullptr)) {
+        return std::string{};
+    }
+    char *ptr;
+    size_t len = BIO_get_mem_data(mem, &ptr);
+    return std::string{ptr, len};
+}
+
 ustring HMAC_sign(HashFunc::Type hash, const ustring &data, const ustring &key) {
     evp_pkey pkey{EVP_PKEY_HMAC, key};
     evp_md_ctx ctx{HashFunc2EVP(hash)};
@@ -295,6 +416,50 @@ bool RSA_verify(HashFunc::Type hash, const ustring &data, const ustring &n, cons
     }
     return ctx.verify_final(signature);
 }
+
+ustring EC_sign(HashFunc::Type hash, const ustring &data, JWA_EC::Curve::Type crv, const ustring &x, const ustring &y, const ustring &d) {
+    ec key;
+    key.set_crv(crv);
+    key.set_xy(x, y);
+    key.set_d(d);
+    evp_pkey pkey;
+    if (!pkey.set(key)) {
+        return ustring{};
+    }
+    evp_md_ctx ctx{HashFunc2EVP(hash)};
+    if (!ctx.init()) {
+        return ustring{};
+    }
+    if (!ctx.sign_init(pkey)) {
+        return ustring{};
+    }
+    if (!ctx.sign_update(data.data(), data.size())) {
+        return ustring{};
+    }
+    return signature_asn2jose(ctx.sign_final());
+}
+
+bool EC_verify(HashFunc::Type hash, const ustring &data, JWA_EC::Curve::Type crv, const ustring &x, const ustring &y, const ustring &signature) {
+    ec key;
+    key.set_crv(crv);
+    key.set_xy(x, y);
+    evp_pkey pkey;
+    if (!pkey.set(key)) {
+        return false;
+    }
+    evp_md_ctx ctx{HashFunc2EVP(hash)};
+    if (!ctx.init()) {
+        return false;
+    }
+    if (!ctx.verify_init(pkey)) {
+        return false;
+    }
+    if (!ctx.verify_update(data.data(), data.size())) {
+        return false;
+    }
+    return ctx.verify_final(signature_jose2asn(signature));
+}
+
 
 extern "C" void __sanitizer_print_stack_trace(void);
 void dump_backtrace() {

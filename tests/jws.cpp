@@ -176,3 +176,59 @@ BOOST_AUTO_TEST_CASE(sign_rsa) {
     );
     BOOST_CHECK(jws.verify(jwk_rsa_public));
 }
+
+BOOST_AUTO_TEST_CASE(verify_ec) {
+    JOSE::JWS jws(
+        "eyJhbGciOiJFUzI1NiJ9"
+        ,
+        "eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFt"
+        "cGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
+        ,
+        "DtEhU3ljbEg8L38VWAfUAqOyKAM6-Xx-F4GawxaepmXFCgfTjDxw5djxLa8ISlSA"
+        "pmWQxfKTUJqPP3-Kg6NU1Q"
+    );
+    JOSE::JWK jwk_ec_public(
+        "{"
+            "\"kty\":\"EC\","
+            "\"crv\":\"P-256\","
+            "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\","
+            "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\""
+        "}"
+    );
+    BOOST_CHECK(jws.verify(jwk_ec_public));
+}
+
+BOOST_AUTO_TEST_CASE(sign_ec) {
+    JOSE::JWS jws;
+    jws.set_alg(
+        JOSE::JWS::Alg::ES256
+    );
+    jws.set_payload(
+        "{\"iss\":\"joe\",\n"
+        " \"exp\":1300819380,\n"
+        " \"http://example.com/is_root\":true}"
+    );
+    {
+        JOSE::JWK jwk_ec_private(
+            "{"
+                "\"kty\":\"EC\","
+                "\"crv\":\"P-256\","
+                "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\","
+                "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\","
+                "\"d\":\"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI\""
+            "}"
+        );
+        BOOST_CHECK(jws.sign(jwk_ec_private));
+    }
+    {
+        JOSE::JWK jwk_ec_public(
+            "{"
+                "\"kty\":\"EC\","
+                "\"crv\":\"P-256\","
+                "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\","
+                "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\""
+            "}"
+        );
+        BOOST_CHECK(jws.verify(jwk_ec_public));
+    }
+}

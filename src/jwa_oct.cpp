@@ -34,7 +34,7 @@ const boost::bimap<Key::Type, boost::bimaps::unordered_set_of<std::string>> Key:
 
 struct JWA_OCTImpl {
     std::shared_ptr<rapidjson::Document> doc;
-    std::string k;
+    ustring k;
     JWA_OCTImpl(): doc{new rapidjson::Document} {}
     JWA_OCTImpl(const std::string &json): doc{new rapidjson::Document} {
         doc->Parse(json.c_str());
@@ -46,14 +46,12 @@ struct JWA_OCTImpl {
             if (!key) {
                 continue;
             }
+            if (!i->value.IsString()) {
+                return false;
+            }
             switch (*key) {
                 case Key::k:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
-                    k = i->value.GetString();
-                    break;
-                default:
+                    k = urlsafe_base64_decode(i->value.GetString());
                     break;
             }
         }
@@ -93,7 +91,10 @@ JWA_OCT::~JWA_OCT() {
     delete impl(_);
 }
 
-const std::string & JWA_OCT::k() const {
+std::string JWA_OCT::k() const {
+    return urlsafe_base64_encode(k_raw());
+}
+const ustring & JWA_OCT::k_raw() const {
     return impl(_)->k;
 }
 

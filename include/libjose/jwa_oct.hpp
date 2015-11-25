@@ -14,7 +14,8 @@ public:
     explicit JWA_OCT(const std::string &);
     ~JWA_OCT();
     operator bool() const {return valid_;}
-    const std::string & k() const;
+    std::string k() const;
+    const ustring & k_raw() const;
 private:
     friend class JWA;
     JWA_OCT(void *);

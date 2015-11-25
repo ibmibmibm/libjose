@@ -168,11 +168,11 @@ struct JWSImpl {
             if (!key) {
                 continue;
             }
+            if ((*key == Key::crit && !i->value.IsArray()) || !i->value.IsString()) {
+                return false;
+            }
             switch (*key) {
                 case Key::alg:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     {
                         auto type = AlgImpl::key2type(i->value.GetString());
                         if (!type) {
@@ -182,63 +182,33 @@ struct JWSImpl {
                     }
                     break;
                 case Key::jku:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     jku = i->value.GetString();
                     break;
                 case Key::jwk:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     jwk = i->value.GetString();
                     break;
                 case Key::kid:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     kid = i->value.GetString();
                     break;
                 case Key::x5u:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     x5u = i->value.GetString();
                     break;
                 case Key::x5c:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     x5c = i->value.GetString();
                     break;
                 case Key::x5t:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     x5t = i->value.GetString();
                     break;
                 case Key::x5t_S256:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     x5t_S256 = i->value.GetString();
                     break;
                 case Key::typ:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     typ = i->value.GetString();
                     break;
                 case Key::cty:
-                    if (!i->value.IsString()) {
-                        return false;
-                    }
                     cty = i->value.GetString();
                     break;
                 case Key::crit:
-                    if (!i->value.IsArray()) {
-                        return false;
-                    }
                     for (auto j = i->value.Begin(); j != i->value.End(); ++j) {
                         if (!j->IsString()) {
                             return false;
@@ -328,7 +298,7 @@ bool JWS::sign(const JWK &jwk) {
     switch (jwa.kty()) {
         case JWA::KeyType::OCT:
             {
-                const ustring key = urlsafe_base64_decode(jwa.oct().k());
+                const ustring &key = jwa.oct().k_raw();
                 signature = HMAC_sign(get_hash(alg), data, key);
                 return true;
             }
@@ -349,7 +319,12 @@ bool JWS::sign(const JWK &jwk) {
             break;
         case JWA::KeyType::EC:
             {
-                return false;
+                JWA_EC::Curve::Type crv = jwa.ec().crv();
+                const ustring &x = jwa.ec().x_raw();
+                const ustring &y = jwa.ec().y_raw();
+                const ustring &d = jwa.ec().d_raw();
+                signature = EC_sign(get_hash(alg), data, crv, x, y, d);
+                return true;
             }
             break;
     }
@@ -366,7 +341,7 @@ bool JWS::verify(const JWK &jwk) const {
     switch (jwa.kty()) {
         case JWA::KeyType::OCT:
             {
-                const ustring key = urlsafe_base64_decode(jwa.oct().k());
+                const ustring &key = jwa.oct().k_raw();
                 return HMAC_verify(get_hash(alg), data, key, signature);
             }
             break;
@@ -381,7 +356,12 @@ bool JWS::verify(const JWK &jwk) const {
             break;
         case JWA::KeyType::EC:
             {
-                return false;
+                const ustring data = to_ustring(impl(_)->header_base64() + '.' + impl(_)->payload_base64());
+                const ustring &signature = impl(_)->signature;
+                JWA_EC::Curve::Type crv = jwa.ec().crv();
+                const ustring &n = jwa.ec().x_raw();
+                const ustring &e = jwa.ec().y_raw();
+                return EC_verify(get_hash(alg), data, crv, n, e, signature);
             }
             break;
     }

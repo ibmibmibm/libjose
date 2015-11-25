@@ -2,6 +2,7 @@
 #define __UTILITY_HPP___
 
 #include <libjose/config.hpp>
+#include <libjose/jwa_ec.hpp>
 #include <initializer_list>
 #include <utility>
 #include <memory>
@@ -33,6 +34,8 @@ ustring urlsafe_base64_decode(const std::string &base64);
 
 std::string RSAPublicKey2PEM(const ustring &n, const ustring &e);
 std::string RSAPrivateKey2PEM(const ustring &n, const ustring &e, const ustring &d, const ustring &p, const ustring &q, const ustring &dp, const ustring &dq, const ustring &qi);
+std::string ECPublicKey2PEM(JWA_EC::Curve::Type crv, const ustring &x, const ustring &y);
+std::string ECPrivateKey2PEM(JWA_EC::Curve::Type crv, const ustring &x, const ustring &y, const ustring &d);
 
 struct HashFunc {
     enum Type {
@@ -48,6 +51,9 @@ bool HMAC_verify(HashFunc::Type hash, const ustring &data, const ustring &key, c
 
 ustring RSA_sign(HashFunc::Type hash, const ustring &data, const ustring &n, const ustring &e, const ustring &d, const ustring &p, const ustring &q, const ustring &dp, const ustring &dq, const ustring &qi);
 bool RSA_verify(HashFunc::Type hash, const ustring &data, const ustring &n, const ustring &e, const ustring &signature);
+
+ustring EC_sign(HashFunc::Type hash, const ustring &data, JWA_EC::Curve::Type crv, const ustring &x, const ustring &y, const ustring &d);
+bool EC_verify(HashFunc::Type hash, const ustring &data, JWA_EC::Curve::Type crv, const ustring &x, const ustring &y, const ustring &signature);
 
 } // namespace JOSE
 

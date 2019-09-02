@@ -64,33 +64,101 @@ static inline void bin2bn(BIGNUM *&x, const ustring &bin) {
     x = BN_bin2bn(bin.data(), bin.size(), x);
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100005L
+static void RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d)
+{
+    if(n != NULL)
+        r->n = n;
+
+    if(e != NULL)
+        r->e = e;
+
+    if(d != NULL)
+        r->d = d;
+}
+
+static void RSA_set0_factors(RSA *r, BIGNUM *p, BIGNUM *q) 
+{
+    if(p != NULL)
+        r->p = p;
+
+    if(q != NULL)
+        r->q = q;
+}
+
+static void RSA_set0_crt_params(RSA *r,BIGNUM *dmp1, BIGNUM *dmq1, BIGNUM *iqmp)
+{
+    if(dmp1 != NULL)
+        r->dmp1 = dmp1;
+
+    if(dmq1 != NULL)
+        r->dmq1 = dmq1;
+
+    if(iqmp != NULL)
+        r->iqmp = iqmp;
+}
+
+static const BIGNUM *ECDSA_SIG_get0_r(const ECDSA_SIG *sig)
+{
+    return sig->r;
+}
+
+static const BIGNUM *ECDSA_SIG_get0_s(const ECDSA_SIG *sig)
+{
+    return sig->s;
+}
+
+static void ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s)
+{
+    if(r != NULL)
+        sig->r = r;
+
+    if(s != NULL)
+        sig->s = s;
+}
+
+#endif
+
 struct rsa {
     RSA *_;
     rsa(): _(RSA_new()) {}
     ~rsa() {RSA_free(_);}
-    void set_n(const ustring &b) {
-        bin2bn(_->n, b);
-    }
-    void set_e(const ustring &b) {
-        bin2bn(_->e, b);
+    void set_ne(const ustring &bn, const ustring &be) {
+        BIGNUM *bn_n = BN_new();
+        BIGNUM *bn_e = BN_new();
+        bin2bn(bn_n, bn);
+        bin2bn(bn_e, be);
+        RSA_set0_key(_, bn_n, bn_e, NULL);
     }
     void set_d(const ustring &b) {
-        bin2bn(_->d, b);
+        BIGNUM *bn_d = BN_new();
+        bin2bn(bn_d, b);
+        RSA_set0_key(_, NULL, NULL, bn_d);
     }
     void set_p(const ustring &b) {
-        bin2bn(_->p, b);
+        BIGNUM *bn_p = BN_new();
+        bin2bn(bn_p, b);
+        RSA_set0_factors(_, bn_p, NULL);
     }
     void set_q(const ustring &b) {
-        bin2bn(_->q, b);
+        BIGNUM *bn_q = BN_new();
+        bin2bn(bn_q, b);
+        RSA_set0_factors(_, NULL, bn_q);
     }
     void set_dp(const ustring &b) {
-        bin2bn(_->dmp1, b);
+        BIGNUM *bn_dmp1 = BN_new();
+        bin2bn(bn_dmp1, b);
+        RSA_set0_crt_params(_, bn_dmp1, NULL, NULL);
     }
     void set_dq(const ustring &b) {
-        bin2bn(_->dmq1, b);
+        BIGNUM *bn_dmq1 = BN_new();
+        bin2bn(bn_dmq1, b);
+        RSA_set0_crt_params(_, NULL, bn_dmq1, NULL);
     }
     void set_qi(const ustring &b) {
-        bin2bn(_->iqmp, b);
+        BIGNUM *bn_iqmp = BN_new();
+        bin2bn(bn_iqmp, b);
+        RSA_set0_crt_params(_, NULL, NULL, bn_iqmp);
     }
     operator RSA*() {return _;}
 };
@@ -176,8 +244,15 @@ struct ecdsa_sig {
     ECDSA_SIG *_;
     ecdsa_sig(): _(ECDSA_SIG_new()) {}
     ~ecdsa_sig() {ECDSA_SIG_free(_);}
-    BIGNUM *&r() {return _->r;}
-    BIGNUM *&s() {return _->s;}
+    const BIGNUM * rget() {
+        return ECDSA_SIG_get0_r(_);
+    }
+    const BIGNUM * sget() {
+        return ECDSA_SIG_get0_s(_);
+    }
+    void rsset(BIGNUM * r, BIGNUM * s) {
+        ECDSA_SIG_set0(_, r, s);
+    }
     operator ECDSA_SIG*() {return _;}
     operator ECDSA_SIG**() {return &_;}
 };
@@ -190,16 +265,19 @@ static inline ustring signature_asn2jose(const ustring &asn) {
         return jose;
     }
 
-    jose.append(bn2bin(sig.r()));
-    jose.append(bn2bin(sig.s()));
+    jose.append(bn2bin(sig.rget()));
+    jose.append(bn2bin(sig.sget()));
     return jose;
 }
 
 static inline ustring signature_jose2asn(const ustring &jose) {
     ustring asan;
     ecdsa_sig sig;
-    bin2bn(sig.r(), jose.substr(0, jose.size() / 2));
-    bin2bn(sig.s(), jose.substr(jose.size() / 2));
+    BIGNUM *bn_r = BN_new();
+    BIGNUM *bn_s = BN_new();
+    bin2bn(bn_r, jose.substr(0, jose.size() / 2));
+    bin2bn(bn_s, jose.substr(jose.size() / 2));
+    sig.rsset(bn_r, bn_s);
     unsigned char *p = nullptr;
     int len;
     len = i2d_ECDSA_SIG(sig, &p);
@@ -278,8 +356,7 @@ ustring urlsafe_base64_decode(const std::string &base64) {
 
 std::string RSAPublicKey2PEM(const ustring &n, const ustring &e) {
     rsa key;
-    key.set_n(n);
-    key.set_e(e);
+    key.set_ne(n,e);
     bio mem(BIO_new(BIO_s_mem()));
     if (1 != PEM_write_bio_RSA_PUBKEY(mem, key)) {
         return std::string{};
@@ -291,8 +368,7 @@ std::string RSAPublicKey2PEM(const ustring &n, const ustring &e) {
 
 std::string RSAPrivateKey2PEM(const ustring &n, const ustring &e, const ustring &d, const ustring &p, const ustring &q, const ustring &dp, const ustring &dq, const ustring &qi) {
     rsa key;
-    key.set_n(n);
-    key.set_e(e);
+    key.set_ne(n, e);
     key.set_d(d);
     key.set_p(p);
     key.set_q(q);
@@ -371,8 +447,7 @@ bool HMAC_verify(HashFunc::Type hash, const ustring &data, const ustring &key, c
 
 ustring RSA_sign(HashFunc::Type hash, const ustring &data, const ustring &n, const ustring &e, const ustring &d, const ustring &p, const ustring &q, const ustring &dp, const ustring &dq, const ustring &qi) {
     rsa key;
-    key.set_n(n);
-    key.set_e(e);
+    key.set_ne(n, e);
     key.set_d(d);
     key.set_p(p);
     key.set_q(q);
@@ -398,8 +473,7 @@ ustring RSA_sign(HashFunc::Type hash, const ustring &data, const ustring &n, con
 
 bool RSA_verify(HashFunc::Type hash, const ustring &data, const ustring &n, const ustring &e, const ustring &signature) {
     rsa key;
-    key.set_n(n);
-    key.set_e(e);
+    key.set_ne(n, e);
     evp_pkey pkey;
     if (!pkey.set(key)) {
         return false;

@@ -2,15 +2,15 @@
 #define __LIBJOSE_JWS_HPP__
 
 #include "config.hpp"
-#include <string>
 #include "exception.hpp"
 #include "jwa.hpp"
+#include <string>
 
 namespace JOSE {
 
 class JWK;
 class JWS {
-public:
+  public:
     struct Alg {
         enum Type {
             HS256,
@@ -28,10 +28,11 @@ public:
             NONE,
         };
     };
-    JWS(const std::string &header, const std::string &payload, const std::string &signature);
+    JWS(const std::string &header, const std::string &payload,
+        const std::string &signature);
     JWS();
     ~JWS();
-    operator bool() const {return valid_;}
+    operator bool() const { return valid_; }
     bool verify(const JWK &jwk) const;
     std::string header() const;
     std::string payload() const;
@@ -40,8 +41,11 @@ public:
     void set_jwk(const JWK &jwk);
     void set_payload(const std::string &payload);
     bool sign(const JWK &jwk);
-    std::string to_string() const {return header() + '.' + payload() + '.' + signature();}
-private:
+    std::string to_string() const {
+        return header() + '.' + payload() + '.' + signature();
+    }
+
+  private:
     void *_;
     bool valid_;
 };

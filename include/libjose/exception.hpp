@@ -4,8 +4,6 @@
 #include "config.hpp"
 #include <stdexcept>
 
-namespace JOSE {
-
-} // namespace JOSE
+namespace JOSE {} // namespace JOSE
 
 #endif // __LIBJOSE_EXCEPTION_HPP___

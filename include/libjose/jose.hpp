@@ -7,12 +7,13 @@
 namespace JOSE {
 
 class JOSE {
-public:
+  public:
     JOSE();
     explicit JOSE(const std::string &json);
     ~JOSE();
-    operator bool() const {return valid_;}
-private:
+    operator bool() const { return valid_; }
+
+  private:
     friend class JWA_OCT;
     friend class JWA_RSA;
     friend class JWA_EC;

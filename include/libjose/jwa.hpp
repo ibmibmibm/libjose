@@ -2,8 +2,8 @@
 #define __LIBJOSE_JWA_HPP__
 
 #include "config.hpp"
-#include <string>
 #include "jwa_ec.hpp"
+#include <string>
 
 namespace JOSE {
 
@@ -12,7 +12,7 @@ class JWA_RSA;
 class JWA_EC;
 
 class JWA {
-public:
+  public:
     struct KeyType {
         enum Type {
             OCT,
@@ -44,7 +44,7 @@ public:
     JWA();
     explicit JWA(const std::string &json);
     ~JWA();
-    operator bool() const {return valid_;}
+    operator bool() const { return valid_; }
     std::string to_pem() const;
     const KeyType::Type &kty() const;
     JWA_OCT &oct() { return *jwaimpl_.oct; }
@@ -53,7 +53,8 @@ public:
     const JWA_RSA &rsa() const { return *jwaimpl_.rsa; }
     JWA_EC &ec() { return *jwaimpl_.ec; }
     const JWA_EC &ec() const { return *jwaimpl_.ec; }
-private:
+
+  private:
     friend class JWK;
     JWA(void *);
     void init_();

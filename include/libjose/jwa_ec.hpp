@@ -2,14 +2,14 @@
 #define __LIBJOSE_JWA_EC_HPP__
 
 #include "config.hpp"
-#include <string>
 #include "jose.hpp"
 #include "jwa.hpp"
+#include <string>
 
 namespace JOSE {
 
 class JWA_EC {
-public:
+  public:
     struct Curve {
         enum Type {
             P256,
@@ -20,16 +20,17 @@ public:
     JWA_EC();
     explicit JWA_EC(const std::string &);
     ~JWA_EC();
-    operator bool() const {return valid_;}
+    operator bool() const { return valid_; }
     std::string to_pem() const;
     Curve::Type crv() const;
     std::string x() const;
-    const ustring & x_raw() const;
+    const ustring &x_raw() const;
     std::string y() const;
-    const ustring & y_raw() const;
+    const ustring &y_raw() const;
     std::string d() const;
-    const ustring & d_raw() const;
-private:
+    const ustring &d_raw() const;
+
+  private:
     friend class JWA;
     JWA_EC(void *);
     void init_();

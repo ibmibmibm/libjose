@@ -2,18 +2,18 @@
 #define __LIBJOSE_JWK_HPP__
 
 #include "config.hpp"
-#include <string>
 #include "exception.hpp"
 #include "jwa.hpp"
+#include <string>
 
 namespace JOSE {
 
 class JWK {
-public:
+  public:
     JWK(const std::string &json);
     JWK();
     ~JWK();
-    operator bool() const {return valid_;}
+    operator bool() const { return valid_; }
     const std::string &use() const;
     const std::string &key_opts() const;
     const std::string &alg() const;
@@ -21,11 +21,12 @@ public:
     const std::string &x5u() const;
     const std::string &x5t() const;
     const std::string &x5t_S256() const;
-    const JWA &jwa() const {return jwa_;}
-    JWA &jwa() {return jwa_;}
+    const JWA &jwa() const { return jwa_; }
+    JWA &jwa() { return jwa_; }
     std::string to_json() const;
-    std::string to_pem() const {return jwa_.to_pem();}
-private:
+    std::string to_pem() const { return jwa_.to_pem(); }
+
+  private:
     void *_;
     JWA jwa_;
     bool valid_;
